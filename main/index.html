@@ -1,0 +1,931 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Photon QR File Transfer</title>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:#090c14;
+  color:#f5f7ff;
+  font-family:system-ui,-apple-system,Segoe UI,sans-serif;
+}
+main{
+  width:min(900px,100%);
+  margin:auto;
+  padding:22px 14px 50px;
+}
+h1{margin:0;font-size:28px}
+h2{font-size:18px;margin:0 0 12px}
+p,.muted{color:#9ba8c0;font-size:13px}
+.panel{
+  background:#131a29;
+  border:1px solid #2b3650;
+  border-radius:15px;
+  padding:17px;
+  margin:15px 0;
+}
+.tabs,.actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.tabs{margin:20px 0}
+button{
+  border:1px solid #35415d;
+  background:#1b2538;
+  color:white;
+  border-radius:9px;
+  padding:11px 15px;
+  cursor:pointer;
+}
+button:disabled{opacity:.4;cursor:not-allowed}
+.primary{background:#8d9eff;border-color:#8d9eff;color:#080b12}
+input,select{
+  width:100%;
+  padding:10px;
+  background:#1b2538;
+  color:white;
+  border:1px solid #35415d;
+  border-radius:9px;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+}
+.stat{
+  background:#1b2538;
+  border:1px solid #35415d;
+  border-radius:9px;
+  padding:12px;
+}
+.stat b{display:block;font-size:20px}
+.stat small{color:#9ba8c0}
+#qr{
+  min-height:300px;
+  margin:15px 0;
+  padding:12px;
+  background:white;
+  border-radius:12px;
+  display:grid;
+  place-items:center;
+}
+#qr img{
+  display:block;
+  max-width:100%;
+  height:auto;
+  image-rendering:pixelated;
+}
+video{
+  display:block;
+  width:100%;
+  max-height:480px;
+  background:#000;
+  border-radius:12px;
+}
+.progress{
+  height:8px;
+  margin-top:10px;
+  overflow:hidden;
+  background:#303b54;
+  border-radius:999px;
+}
+.progress div{
+  width:0;
+  height:100%;
+  background:#8d9eff;
+}
+.notice{
+  padding:12px;
+  background:#0d1320;
+  border:1px solid #303b54;
+  border-radius:9px;
+  color:#aab6cc;
+  font-size:13px;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.hidden{display:none!important}
+label{display:block;color:#9ba8c0;font-size:12px;margin-bottom:5px}
+@media(max-width:560px){
+  .grid{grid-template-columns:1fr}
+  .panel{padding:13px}
+}
+</style>
+</head>
+
+<body>
+<main>
+  <h1>Photon</h1>
+  <p>Live file transfer through changing QR codes.</p>
+
+  <div class="tabs">
+    <button id="sendTab" class="primary">Send</button>
+    <button id="receiveTab">Receive</button>
+  </div>
+
+  <section id="sendPage">
+    <div class="panel">
+      <h2>Select a file</h2>
+      <input id="fileInput" type="file">
+      <p id="fileInfo">No file selected.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Live QR stream</h2>
+
+      <div id="sendStatus" class="notice">
+        Select a file. Transmission starts automatically.
+      </div>
+
+      <div id="qr">
+        <span style="color:#555">QR code appears here</span>
+      </div>
+
+      <div id="frameText" class="muted">Frame 0 / 0</div>
+      <div class="progress">
+        <div id="sendProgress"></div>
+      </div>
+
+      <div class="grid" style="margin-top:15px">
+        <div>
+          <label for="speed">Frame speed</label>
+          <select id="speed">
+            <option value="1100">Slow</option>
+            <option value="700">Normal</option>
+            <option value="450" selected>Fast</option>
+            <option value="300">Very fast</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="repeat">Repeat count</label>
+          <select id="repeat">
+            <option value="1">1×</option>
+            <option value="2" selected>2×</option>
+            <option value="3">3×</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="ecc">Error correction</label>
+          <select id="ecc">
+            <option value="L">Low</option>
+            <option value="M" selected>Medium</option>
+            <option value="Q">High</option>
+            <option value="H">Maximum</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="actions" style="margin-top:15px">
+        <button id="pauseButton" disabled>Pause</button>
+        <button id="restartButton" disabled>Restart</button>
+        <button id="resetButton">Reset</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Transfer information</h2>
+
+      <div class="grid">
+        <div class="stat">
+          <b id="fileSize">—</b>
+          <small>File size</small>
+        </div>
+
+        <div class="stat">
+          <b id="frameCount">—</b>
+          <small>Total frames</small>
+        </div>
+
+        <div class="stat">
+          <b id="timeEstimate">—</b>
+          <small>Loop estimate</small>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="receivePage" class="hidden">
+    <div class="panel">
+      <h2>Camera receiver</h2>
+
+      <video id="camera" playsinline muted></video>
+
+      <div class="actions" style="margin-top:14px">
+        <button id="cameraStart" class="primary">Start camera</button>
+        <button id="cameraStop" disabled>Stop camera</button>
+      </div>
+
+      <div id="receiveStatus" class="notice" style="margin-top:12px">
+        Start the camera and point it at the sender screen.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Received file</h2>
+
+      <div id="receivedName" class="muted">Waiting for metadata…</div>
+      <div id="receivedFrames" class="muted">0 / 0 frames</div>
+
+      <div class="progress">
+        <div id="receiveProgress"></div>
+      </div>
+
+      <p id="receivedDetail">No data received.</p>
+
+      <div class="actions">
+        <button id="downloadButton" class="primary" disabled>
+          Download file
+        </button>
+        <button id="clearReceive">Clear</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="errorBox" class="notice hidden"></div>
+</main>
+
+<script>
+"use strict";
+
+const $ = id => document.getElementById(id);
+
+const CHUNK_SIZE = 500;
+
+const state = {
+  file: null,
+  bytes: null,
+  transferId: "",
+  metadata: null,
+  frames: [],
+  imageCache: new Map(),
+  frameIndex: 0,
+  timer: null,
+  running: false,
+  stream: null,
+  scanAnimation: null,
+  received: new Map(),
+  receivedBlob: null,
+  lastPayload: "",
+  lastPayloadTime: 0,
+  verifying: false
+};
+
+function setText(id, value) {
+  $(id).textContent = value;
+}
+
+function setProgress(id, value) {
+  $(id).style.width = Math.max(0, Math.min(100, value)) + "%";
+}
+
+function showError(error) {
+  const box = $("errorBox");
+  box.classList.remove("hidden");
+  box.textContent = String(error?.stack || error);
+}
+
+window.addEventListener("error", event => {
+  showError(event.error || event.message);
+});
+
+window.addEventListener("unhandledrejection", event => {
+  showError(event.reason);
+});
+
+function formatBytes(value) {
+  if (value < 1024) return value + " B";
+  if (value < 1024 * 1024) return (value / 1024).toFixed(1) + " KB";
+  return (value / 1024 / 1024).toFixed(2) + " MB";
+}
+
+function randomId() {
+  if (crypto.randomUUID) {
+    return crypto.randomUUID().replaceAll("-", "");
+  }
+
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+function encodeBase64(bytes) {
+  let output = "";
+
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    output += String.fromCharCode(
+      ...bytes.subarray(i, i + 0x8000)
+    );
+  }
+
+  return btoa(output)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "");
+}
+
+function decodeBase64(value) {
+  value = value.replaceAll("-", "+").replaceAll("_", "/");
+
+  while (value.length % 4) {
+    value += "=";
+  }
+
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  return bytes;
+}
+
+async function sha256(bytes) {
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+
+  return [...new Uint8Array(hash)]
+    .map(value => value.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function stopSenderTimer() {
+  if (state.timer !== null) {
+    clearTimeout(state.timer);
+    state.timer = null;
+  }
+}
+
+function pauseSender() {
+  state.running = false;
+  stopSenderTimer();
+  $("pauseButton").textContent = "Resume";
+  setText("sendStatus", "Paused.");
+}
+
+function resetSender() {
+  pauseSender();
+
+  state.file = null;
+  state.bytes = null;
+  state.transferId = "";
+  state.metadata = null;
+  state.frames = [];
+  state.imageCache.clear();
+  state.frameIndex = 0;
+
+  $("fileInput").value = "";
+  $("pauseButton").disabled = true;
+  $("restartButton").disabled = true;
+
+  $("qr").innerHTML =
+    '<span style="color:#555">QR code appears here</span>';
+
+  setText("fileInfo", "No file selected.");
+  setText("sendStatus", "Select a file. Transmission starts automatically.");
+  setText("frameText", "Frame 0 / 0");
+  setText("fileSize", "—");
+  setText("frameCount", "—");
+  setText("timeEstimate", "—");
+  setProgress("sendProgress", 0);
+}
+
+function switchMode(mode) {
+  const sending = mode === "send";
+
+  $("sendPage").classList.toggle("hidden", !sending);
+  $("receivePage").classList.toggle("hidden", sending);
+
+  $("sendTab").classList.toggle("primary", sending);
+  $("receiveTab").classList.toggle("primary", !sending);
+
+  if (sending) {
+    stopCamera();
+  }
+}
+
+$("sendTab").onclick = () => switchMode("send");
+$("receiveTab").onclick = () => switchMode("receive");
+
+function createDataPayload(index, total, data) {
+  return [
+    "D",
+    state.transferId,
+    index,
+    total,
+    data
+  ].join("|");
+}
+
+function createQRImage(payload) {
+  return new Promise((resolve, reject) => {
+    if (typeof qrcode !== "function") {
+      reject(new Error(
+        "The QR generator failed to load. Reload with internet access."
+      ));
+      return;
+    }
+
+    try {
+      const qr = qrcode(0, $("ecc").value);
+
+      qr.addData(payload);
+      qr.make();
+
+      const image = document.createElement("img");
+      image.alt = "QR transfer frame";
+      image.src = qr.createDataURL(5, 2);
+
+      image.onload = () => resolve(image);
+      image.onerror = () => {
+        reject(new Error("The QR image could not be created."));
+      };
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+async function getFrameImage(index) {
+  if (state.imageCache.has(index)) {
+    return state.imageCache.get(index);
+  }
+
+  const image = await createQRImage(state.frames[index]);
+  state.imageCache.set(index, image);
+
+  return image;
+}
+
+async function renderFrame() {
+  if (!state.frames.length) return;
+
+  const image = await getFrameImage(state.frameIndex);
+
+  $("qr").replaceChildren(image);
+
+  setText(
+    "frameText",
+    `Frame ${state.frameIndex + 1} / ${state.frames.length}`
+  );
+
+  setProgress(
+    "sendProgress",
+    ((state.frameIndex + 1) / state.frames.length) * 100
+  );
+}
+
+async function transmitNextFrame() {
+  if (!state.running || !state.frames.length) return;
+
+  try {
+    // Render the current frame first.
+    // This guarantees that transmission starts at frame 1.
+    await renderFrame();
+
+    if (!state.running) return;
+
+    // Advance only after the current frame was displayed.
+    state.frameIndex =
+      (state.frameIndex + 1) % state.frames.length;
+
+    state.timer = setTimeout(
+      transmitNextFrame,
+      Number($("speed").value)
+    );
+  } catch (error) {
+    pauseSender();
+    showError(error);
+  }
+}
+
+async function prepareFile(file) {
+  pauseSender();
+
+  state.file = file;
+  state.bytes = new Uint8Array(await file.arrayBuffer());
+  state.transferId = randomId();
+  state.frames = [];
+  state.imageCache.clear();
+  state.frameIndex = 0;
+
+  const totalDataFrames = Math.max(
+    1,
+    Math.ceil(state.bytes.length / CHUNK_SIZE)
+  );
+
+  const metadata = {
+    id: state.transferId,
+    name: file.name,
+    type: file.type || "application/octet-stream",
+    size: file.size,
+    total: totalDataFrames,
+    hash: await sha256(state.bytes)
+  };
+
+  state.metadata = metadata;
+
+  const metadataPayload = [
+    "M",
+    state.transferId,
+    totalDataFrames,
+    encodeBase64(
+      new TextEncoder().encode(JSON.stringify(metadata))
+    )
+  ].join("|");
+
+  state.frames.push(metadataPayload);
+
+  for (let index = 0; index < totalDataFrames; index++) {
+    const start = index * CHUNK_SIZE;
+    const end = Math.min(
+      start + CHUNK_SIZE,
+      state.bytes.length
+    );
+
+    const chunk = state.bytes.subarray(start, end);
+
+    state.frames.push(
+      createDataPayload(
+        index,
+        totalDataFrames,
+        encodeBase64(chunk)
+      )
+    );
+  }
+
+  setText("fileInfo", `${file.name} · ${formatBytes(file.size)}`);
+  setText("fileSize", formatBytes(file.size));
+  setText("frameCount", totalDataFrames);
+
+  const estimatedMilliseconds =
+    state.frames.length *
+    Number($("speed").value) *
+    Number($("repeat").value);
+
+  setText(
+    "timeEstimate",
+    Math.ceil(estimatedMilliseconds / 1000) + " sec"
+  );
+
+  $("pauseButton").disabled = false;
+  $("restartButton").disabled = false;
+  $("pauseButton").textContent = "Pause";
+
+  setText("sendStatus", "Live transmission started.");
+
+  state.running = true;
+  stopSenderTimer();
+
+  // Start directly at frame 1.
+  await transmitNextFrame();
+}
+
+$("fileInput").onchange = async event => {
+  const file = event.target.files?.[0];
+
+  if (!file) return;
+
+  try {
+    await prepareFile(file);
+  } catch (error) {
+    showError(error);
+    setText("sendStatus", "Could not prepare the file.");
+  }
+};
+
+$("pauseButton").onclick = () => {
+  if (state.running) {
+    pauseSender();
+    return;
+  }
+
+  if (!state.frames.length) return;
+
+  state.running = true;
+  $("pauseButton").textContent = "Pause";
+  setText("sendStatus", "Live transmission resumed.");
+
+  stopSenderTimer();
+  transmitNextFrame();
+};
+
+$("restartButton").onclick = async () => {
+  if (!state.frames.length) return;
+
+  stopSenderTimer();
+
+  state.frameIndex = 0;
+  state.imageCache.clear();
+  state.running = true;
+
+  $("pauseButton").textContent = "Pause";
+  setText("sendStatus", "Restarted from frame 1.");
+
+  await transmitNextFrame();
+};
+
+$("resetButton").onclick = resetSender;
+
+$("speed").onchange = () => {
+  if (state.running) {
+    stopSenderTimer();
+    transmitNextFrame();
+  }
+};
+
+/* Receiver */
+
+function stopCamera() {
+  if (state.scanAnimation !== null) {
+    cancelAnimationFrame(state.scanAnimation);
+    state.scanAnimation = null;
+  }
+
+  if (state.stream) {
+    state.stream.getTracks().forEach(track => track.stop());
+    state.stream = null;
+  }
+
+  $("camera").srcObject = null;
+  $("cameraStart").disabled = false;
+  $("cameraStop").disabled = true;
+}
+
+async function startCamera() {
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error(
+        "Camera access requires HTTPS or localhost."
+      );
+    }
+
+    state.stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    });
+
+    $("camera").srcObject = state.stream;
+    await $("camera").play();
+
+    $("cameraStart").disabled = true;
+    $("cameraStop").disabled = false;
+
+    setText(
+      "receiveStatus",
+      "Scanning live. Point the camera at the QR stream."
+    );
+
+    scanCamera();
+  } catch (error) {
+    showError(error);
+    stopCamera();
+  }
+}
+
+$("cameraStart").onclick = startCamera;
+$("cameraStop").onclick = stopCamera;
+
+function scanCamera() {
+  if (!state.stream) return;
+
+  const video = $("camera");
+
+  if (
+    video.readyState >= 2 &&
+    video.videoWidth > 0 &&
+    typeof jsQR === "function"
+  ) {
+    const canvas = document.createElement("canvas");
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const context = canvas.getContext("2d", {
+      willReadFrequently: true
+    });
+
+    context.drawImage(
+      video,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    const image = context.getImageData(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    const result = jsQR(
+      image.data,
+      image.width,
+      image.height,
+      { inversionAttempts: "attemptBoth" }
+    );
+
+    if (result?.data) {
+      processPayload(result.data);
+    }
+  }
+
+  state.scanAnimation = requestAnimationFrame(scanCamera);
+}
+
+function processPayload(payload) {
+  if (
+    payload === state.lastPayload &&
+    Date.now() - state.lastPayloadTime < 180
+  ) {
+    return;
+  }
+
+  state.lastPayload = payload;
+  state.lastPayloadTime = Date.now();
+
+  const parts = payload.split("|");
+
+  if (parts[0] === "M" && parts.length === 4) {
+    try {
+      const metadata = JSON.parse(
+        new TextDecoder().decode(decodeBase64(parts[3]))
+      );
+
+      if (!metadata.id || !metadata.total) return;
+
+      if (state.transferId !== metadata.id) {
+        state.transferId = metadata.id;
+        state.metadata = metadata;
+        state.received.clear();
+        state.receivedBlob = null;
+        state.verifying = false;
+        $("downloadButton").disabled = true;
+      }
+
+      updateReceiver();
+
+      setText(
+        "receiveStatus",
+        "File detected. Keep the camera pointed at the QR stream."
+      );
+    } catch {
+      // Ignore unreadable metadata.
+    }
+
+    return;
+  }
+
+  if (
+    parts[0] !== "D" ||
+    parts.length !== 5 ||
+    !state.metadata ||
+    parts[1] !== state.transferId
+  ) {
+    return;
+  }
+
+  const index = Number(parts[2]);
+  const total = Number(parts[3]);
+
+  if (
+    !Number.isInteger(index) ||
+    index < 0 ||
+    index >= total ||
+    total !== state.metadata.total
+  ) {
+    return;
+  }
+
+  if (state.received.has(index)) return;
+
+  try {
+    state.received.set(index, decodeBase64(parts[4]));
+    updateReceiver();
+  } catch {
+    // Ignore invalid data frames.
+  }
+}
+
+function updateReceiver() {
+  const total = state.metadata?.total || 0;
+  const count = state.received.size;
+
+  if (state.metadata) {
+    setText(
+      "receivedName",
+      `${state.metadata.name} · ${formatBytes(state.metadata.size)}`
+    );
+  }
+
+  setText("receivedFrames", `${count} / ${total}`);
+
+  setProgress(
+    "receiveProgress",
+    total ? (count / total) * 100 : 0
+  );
+
+  if (total && count === total) {
+    verifyReceivedFile();
+  } else {
+    setText("receivedDetail", "Receiving frames…");
+  }
+}
+
+async function verifyReceivedFile() {
+  if (state.verifying || state.receivedBlob) return;
+
+  state.verifying = true;
+
+  try {
+    const pieces = [];
+
+    for (let i = 0; i < state.metadata.total; i++) {
+      if (!state.received.has(i)) {
+        state.verifying = false;
+        return;
+      }
+
+      pieces.push(state.received.get(i));
+    }
+
+    const blob = new Blob(pieces, {
+      type: state.metadata.type
+    });
+
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const actualHash = await sha256(bytes);
+
+    if (actualHash !== state.metadata.hash) {
+      setText(
+        "receivedDetail",
+        "Checksum mismatch. Keep scanning to receive the correct frames."
+      );
+
+      state.verifying = false;
+      return;
+    }
+
+    state.receivedBlob = blob;
+    $("downloadButton").disabled = false;
+
+    setText(
+      "receivedDetail",
+      "File verified successfully. Download is ready."
+    );
+  } catch (error) {
+    showError(error);
+  } finally {
+    state.verifying = false;
+  }
+}
+
+$("downloadButton").onclick = () => {
+  if (!state.receivedBlob || !state.metadata) return;
+
+  const url = URL.createObjectURL(state.receivedBlob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = state.metadata.name;
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+};
+
+$("clearReceive").onclick = () => {
+  state.transferId = "";
+  state.metadata = null;
+  state.received.clear();
+  state.receivedBlob = null;
+  state.verifying = false;
+  state.lastPayload = "";
+  state.lastPayloadTime = 0;
+
+  $("downloadButton").disabled = true;
+
+  setText("receivedName", "Waiting for metadata…");
+  setText("receivedFrames", "0 / 0");
+  setText("receivedDetail", "No data received.");
+  setProgress("receiveProgress", 0);
+};
+</script>
+</body>
+</html>
